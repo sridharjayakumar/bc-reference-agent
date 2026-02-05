@@ -1,0 +1,135 @@
+/**
+ * Custom styles for Brand Concierge Test UI
+ * Tailwind CSS is loaded via CDN; this file contains additional customizations.
+ */
+
+/* Custom scrollbar for messages area */
+#messages::-webkit-scrollbar {
+    width: 6px;
+}
+
+#messages::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+#messages::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+#messages::-webkit-scrollbar-thumb:hover {
+    background: #a1a1a1;
+}
+
+/* Smooth transitions */
+.transition-colors {
+    transition-property: background-color, border-color, color;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+}
+
+/* Message bubble animations */
+.message-bubble {
+    animation: slideIn 0.2s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Focus states */
+input:focus,
+button:focus {
+    outline: none;
+}
+
+/* Loading spinner */
+.spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: white;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+    .container {
+        padding: 0.5rem;
+    }
+
+    #messages {
+        height: 300px;
+    }
+}
+
+/* Skill badges hover effect */
+[title] {
+    cursor: help;
+}
+
+/* Token input field - use disc for password masking */
+#ims-token {
+    -webkit-text-security: disc;
+}
+
+/* Code display */
+code {
+    font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+}
+
+/* Details/summary styling */
+details summary {
+    list-style: none;
+}
+
+details summary::-webkit-details-marker {
+    display: none;
+}
+
+details summary::before {
+    content: '▶';
+    display: inline-block;
+    margin-right: 0.5rem;
+    transition: transform 0.2s;
+}
+
+details[open] summary::before {
+    transform: rotate(90deg);
+}
+
+/* Button disabled state */
+button:disabled {
+    cursor: not-allowed;
+}
+
+/* Connection status dot pulse animation when connecting */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.status-dot.connecting {
+    animation: pulse 1s ease-in-out infinite;
+    background-color: #fbbf24;
+}

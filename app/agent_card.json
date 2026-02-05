@@ -1,0 +1,59 @@
+{
+  "name": "Brand Concierge Reference Agent",
+  "description": "A reference A2A agent implementation that integrates with Adobe Brand Concierge. Demonstrates how to build custom agents with skills for product recommendations, site navigation, and brand assistance. Orchestrated by Adobe Experience Platform Agent Orchestrator.",
+  "url": "http://localhost:8000",
+  "protocolVersions": ["0.2", "0.3"],
+  "provider": {
+    "organization": "Sample Organization",
+    "url": "https://sample.org/sample-product/home.html"
+  },
+  "capabilities": {
+    "streaming": true,
+    "pushNotifications": false,
+    "extendedAgentCard": false
+  },
+  "skills": [
+    {
+      "id": "product-advisor",
+      "name": "Product Advisor",
+      "description": "Provides personalized product recommendations, comparisons, and detailed information based on customer needs and preferences.",
+      "tags": ["product", "recommendation", "comparison", "retail"],
+      "examples": [
+        "What laptop would you recommend for video editing?",
+        "Compare these two products for me",
+        "I'm looking for a gift under $100"
+      ]
+    },
+    {
+      "id": "site-navigator",
+      "name": "Site Navigator",
+      "description": "Helps users find content, navigate the site, and discover relevant resources based on their intent.",
+      "tags": ["navigation", "search", "discovery"],
+      "examples": [
+        "Where can I find your return policy?",
+        "Show me your latest blog posts about sustainability",
+        "I need help finding customer support"
+      ]
+    },
+    {
+      "id": "brand-assistant",
+      "name": "Brand Assistant",
+      "description": "Answers questions about the brand, provides company information, and maintains brand voice throughout interactions.",
+      "tags": ["brand", "information", "faq"],
+      "examples": [
+        "Tell me about your company values",
+        "What makes your brand different?",
+        "Do you have any current promotions?"
+      ]
+    }
+  ],
+  "securitySchemes": {
+    "imsBearer": {
+      "type": "http",
+      "scheme": "bearer",
+      "bearerFormat": "IMS",
+      "description": "Adobe IMS access token"
+    }
+  },
+  "security": [{ "imsBearer": [] }]
+}

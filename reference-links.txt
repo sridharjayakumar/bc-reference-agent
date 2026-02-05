@@ -1,0 +1,17 @@
+1/ A2A Protocol spec:  https://a2a-protocol.org/latest/specification/
+2. SDK supported by A2A:  https://a2a-protocol.org/latest/sdk/
+3. Python SDK:  https://github.com/a2aproject/a2a-python
+4. Sample agents using A2A Python language:  https://github.com/a2aproject/a2a-samples/tree/main/samples/python/agents
+5. Sample agents in other languages:  https://github.com/a2aproject/a2a-samples/tree/main/samples
+6. A2A core concepts:  https://a2a-protocol.org/latest/specification/#14-normative-content
+7. Agent Cards in Spec:  https://a2a-protocol.org/latest/specification/#441-agentcard
+8. Agent Discovery(we use direct configuration via our own github repo):  https://a2a-protocol.org/latest/topics/agent-discovery/#2-curated-registries-catalog-based-discovery
+9. Life of the task:  https://a2a-protocol.org/latest/topics/life-of-a-task/#example-follow-up-scenario
+10. A2A Extensions:  https://a2a-protocol.org/latest/topics/extensions/
+11. Our guide to implementing Agents:  https://devhome.corp.adobe.com/docs/default/component/agent-orchestrator/developer-guides/pages/agent-development
+    items to pay attention:
+Error management:  https://devhome.corp.adobe.com/docs/default/component/agent-orchestrator/developer-guides/pages/exceptions-in-AO
+Handling user input:  https://devhome.corp.adobe.com/docs/default/component/agent-orchestrator/developer-guides/pages/handling-user-input-patterns
+State management:  https://devhome.corp.adobe.com/docs/default/component/agent-orchestrator/developer-guides/pages/state-management-a2a-deployments
+Describing Agent Capabilities:  https://devhome.corp.adobe.com/docs/default/component/agent-orchestrator/developer-guides/pages/agent-card-description-guide
+12. Adobe A2A Extensions:  https://github.com/OneAdobe/adobe-a2a/tree/main/extensions/adobe
