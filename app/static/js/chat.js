@@ -187,6 +187,11 @@ class ChatUI {
         this.client = new A2AClient();
         this.isConnected = false;
 
+        // Message history for arrow key navigation
+        this.messageHistory = [];
+        this.historyIndex = -1;
+        this.currentDraft = '';
+
         // DOM Elements
         this.elements = {
             tokenInput: document.getElementById('ims-token'),
@@ -202,21 +207,30 @@ class ChatUI {
             contextIdDisplay: document.getElementById('context-id'),
             newConversationBtn: document.getElementById('new-conversation-btn'),
             connectionStatus: document.getElementById('connection-status'),
-            taskPanel: document.getElementById('task-panel'),
-            taskList: document.getElementById('task-list'),
         };
 
         this.init();
     }
 
     init() {
-        // Try to restore session from storage
-        const token = this.client.loadToken();
+        // Check for server-provided token (from env variable)
+        const serverToken = window.__IMS_TOKEN__ || '';
+        this.serverTokenProvided = serverToken.length > 0;
+
         this.client.loadContextId();
 
-        if (token) {
-            this.elements.tokenInput.value = token;
+        if (this.serverTokenProvided) {
+            // Token provided via environment — hide auth panel, auto-connect
+            this.elements.authPanel.classList.add('hidden');
+            this.client.setToken(serverToken);
             this.validateAndConnect();
+        } else {
+            // No server token — try to restore from session storage
+            const storedToken = this.client.loadToken();
+            if (storedToken) {
+                this.elements.tokenInput.value = storedToken;
+                this.validateAndConnect();
+            }
         }
 
         // Event listeners
@@ -232,6 +246,9 @@ class ChatUI {
                 this.connect();
             }
         });
+
+        // Message history navigation with arrow keys
+        this.elements.messageInput.addEventListener('keydown', (e) => this.handleHistoryNavigation(e));
     }
 
     async connect() {
@@ -268,6 +285,11 @@ class ChatUI {
             this.isConnected = false;
             this.updateConnectionStatus(false);
 
+            // If the server-provided token failed, reveal the auth panel with the error
+            if (this.serverTokenProvided) {
+                this.elements.authPanel.classList.remove('hidden');
+            }
+
             if (error instanceof AuthenticationError) {
                 this.showAuthError(`Authentication failed: ${error.message}`);
                 this.client.clearToken();
@@ -285,6 +307,11 @@ class ChatUI {
 
         const text = this.elements.messageInput.value.trim();
         if (!text || !this.isConnected) return;
+
+        // Add to message history
+        this.messageHistory.push(text);
+        this.historyIndex = this.messageHistory.length;
+        this.currentDraft = '';
 
         // Clear input and disable send
         this.elements.messageInput.value = '';
@@ -312,9 +339,6 @@ class ChatUI {
                 this.addSystemMessage(`Task failed: ${task.status.error?.message || 'Unknown error'}`);
             }
 
-            // Refresh task list
-            await this.refreshTaskList();
-
         } catch (error) {
             this.addSystemMessage(`Error: ${error.message}`);
 
@@ -324,6 +348,40 @@ class ChatUI {
         } finally {
             this.setSending(false);
             this.elements.messageInput.focus();
+        }
+    }
+
+    handleHistoryNavigation(event) {
+        // Handle arrow key navigation through message history
+        if (event.key === 'ArrowUp') {
+            event.preventDefault();
+
+            if (this.messageHistory.length === 0) return;
+
+            // Save current draft when first pressing up
+            if (this.historyIndex === this.messageHistory.length) {
+                this.currentDraft = this.elements.messageInput.value;
+            }
+
+            // Navigate backwards in history
+            if (this.historyIndex > 0) {
+                this.historyIndex--;
+                this.elements.messageInput.value = this.messageHistory[this.historyIndex];
+            }
+        } else if (event.key === 'ArrowDown') {
+            event.preventDefault();
+
+            if (this.messageHistory.length === 0) return;
+
+            // Navigate forwards in history
+            if (this.historyIndex < this.messageHistory.length - 1) {
+                this.historyIndex++;
+                this.elements.messageInput.value = this.messageHistory[this.historyIndex];
+            } else if (this.historyIndex === this.messageHistory.length - 1) {
+                // Reached the end, restore draft or clear
+                this.historyIndex = this.messageHistory.length;
+                this.elements.messageInput.value = this.currentDraft;
+            }
         }
     }
 
@@ -360,9 +418,82 @@ class ChatUI {
             bubble.appendChild(meta);
         }
 
+        // Check if agent message needs confirmation buttons
+        console.log('[BUTTON DEBUG] Checking if buttons needed, role:', role);
+        if (role === 'agent' && this.needsConfirmation(text)) {
+            console.log('[BUTTON DEBUG] Creating buttons!');
+            const buttonContainer = document.createElement('div');
+            buttonContainer.className = 'flex gap-2 mt-3';
+
+            const confirmBtn = document.createElement('button');
+            confirmBtn.textContent = 'Confirm';
+            confirmBtn.className = 'px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors';
+            confirmBtn.onclick = () => this.handleConfirmation(true, buttonContainer);
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.className = 'px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors';
+            cancelBtn.onclick = () => this.handleConfirmation(false, buttonContainer);
+
+            buttonContainer.appendChild(confirmBtn);
+            buttonContainer.appendChild(cancelBtn);
+            bubble.appendChild(buttonContainer);
+            console.log('[BUTTON DEBUG] Buttons appended to bubble');
+        } else {
+            console.log('[BUTTON DEBUG] No buttons needed');
+        }
+
         messageDiv.appendChild(bubble);
         this.elements.messages.appendChild(messageDiv);
         this.elements.messages.scrollTop = this.elements.messages.scrollHeight;
+    }
+
+    needsConfirmation(text) {
+        // Check if text indicates a pending change that needs confirmation
+        const confirmationPatterns = [
+            /will be changed to/i,
+            /will be updated to/i,
+            /address will be changed/i,
+            /delivery date will be changed/i
+        ];
+        const result = confirmationPatterns.some(pattern => pattern.test(text));
+        console.log('[BUTTON DEBUG] needsConfirmation called');
+        console.log('[BUTTON DEBUG] text:', text);
+        console.log('[BUTTON DEBUG] result:', result);
+        return result;
+    }
+
+    async handleConfirmation(confirmed, buttonContainer) {
+        // Disable buttons immediately
+        buttonContainer.querySelectorAll('button').forEach(btn => {
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+        });
+
+        // Send confirmation or cancellation
+        const message = confirmed ? 'confirm' : 'cancel';
+
+        try {
+            const task = await this.client.sendMessage(message);
+
+            // Update context display
+            this.updateContextDisplay();
+
+            // Extract and display agent response
+            const agentMessages = task.messages.filter(m => m.role === 'agent');
+            if (agentMessages.length > 0) {
+                const lastResponse = agentMessages[agentMessages.length - 1];
+                const responseText = this.extractTextFromMessage(lastResponse);
+                this.addMessage('agent', responseText, task);
+            }
+
+        } catch (error) {
+            this.addSystemMessage(`Error: ${error.message}`);
+
+            if (error instanceof AuthenticationError) {
+                this.disconnect();
+            }
+        }
     }
 
     addSystemMessage(text) {
@@ -406,58 +537,19 @@ class ChatUI {
                 }
             }
 
-            await this.refreshTaskList();
         } catch (error) {
             console.error('Failed to load conversation history:', error);
         }
     }
 
-    async refreshTaskList() {
-        try {
-            const tasks = await this.client.listTasks(this.client.contextId);
-            this.renderTaskList(tasks);
-            this.elements.taskPanel.classList.remove('hidden');
-        } catch (error) {
-            console.error('Failed to refresh task list:', error);
-        }
-    }
-
-    renderTaskList(tasks) {
-        this.elements.taskList.innerHTML = '';
-
-        if (tasks.length === 0) {
-            this.elements.taskList.innerHTML = '<p class="text-gray-500 text-sm">No tasks yet.</p>';
-            return;
-        }
-
-        // Show last 10, newest first
-        for (const task of tasks.slice(-10).reverse()) {
-            const taskDiv = document.createElement('div');
-            taskDiv.className = 'p-3 bg-gray-50 rounded-lg text-sm';
-
-            const statusColor = {
-                'completed': 'text-green-600',
-                'working': 'text-blue-600',
-                'failed': 'text-red-600',
-                'canceled': 'text-gray-600',
-            }[task.status.state] || 'text-gray-600';
-
-            taskDiv.innerHTML = `
-                <div class="flex justify-between items-center">
-                    <code class="text-xs bg-gray-200 px-2 py-1 rounded">${task.id.substring(0, 12)}...</code>
-                    <span class="${statusColor} font-medium">${task.status.state}</span>
-                </div>
-                <div class="text-gray-500 text-xs mt-1">
-                    Updated: ${new Date(task.updatedAt).toLocaleString()}
-                </div>
-            `;
-
-            this.elements.taskList.appendChild(taskDiv);
-        }
-    }
-
     startNewConversation() {
         this.client.clearContextId();
+
+        // Reset message history
+        this.messageHistory = [];
+        this.historyIndex = -1;
+        this.currentDraft = '';
+
         this.elements.messages.innerHTML = `
             <div class="welcome-message text-center text-gray-500 py-8">
                 <p>Start a new conversation with the agent.</p>
@@ -465,8 +557,6 @@ class ChatUI {
             </div>
         `;
         this.updateContextDisplay();
-        this.elements.taskPanel.classList.add('hidden');
-        this.elements.taskList.innerHTML = '';
     }
 
     clearSession() {
@@ -480,11 +570,11 @@ class ChatUI {
         this.isConnected = false;
         this.updateConnectionStatus(false);
         this.elements.chatContainer.classList.add('hidden');
-        this.elements.taskPanel.classList.add('hidden');
         this.elements.authPanel.classList.remove('hidden');
     }
 
     showChatInterface() {
+        this.elements.authPanel.classList.add('hidden');
         this.elements.chatContainer.classList.remove('hidden');
         this.elements.messageInput.focus();
     }

@@ -1,0 +1,36 @@
+# Development Dockerfile with hot-reload
+FROM python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m -u 1000 appuser && \
+    mkdir -p /app && \
+    chown -R appuser:appuser /app
+
+WORKDIR /app
+
+# Install Python dependencies (README.md required by pyproject.toml)
+COPY --chown=appuser:appuser pyproject.toml README.md ./
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -e ".[dev]"
+
+# Copy application code (will be mounted as volume in docker-compose)
+COPY --chown=appuser:appuser . .
+
+# Switch to non-root user
+USER appuser
+
+# Environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PORT=8000 \
+    HOST=0.0.0.0
+
+EXPOSE 8000
+
+# Run with auto-reload for development
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

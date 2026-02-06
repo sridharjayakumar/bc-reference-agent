@@ -13,6 +13,7 @@ from app.agents.handler import A2AHandler
 from app.api.routes import health
 from app.auth.dependencies import AuthenticationError, require_ims_auth
 from app.core.config import settings
+from app.repositories.order_repository import OrderRepository
 from app.services.session import IMSSession
 
 app = FastAPI(
@@ -66,7 +67,19 @@ async def test_ui(request: Request) -> HTMLResponse:
             "agent_name": AGENT_CARD.get("name", "Brand Concierge Reference Agent"),
             "agent_description": AGENT_CARD.get("description", ""),
             "skills": AGENT_CARD.get("skills", []),
+            "ims_token": settings.ims_client_id,
         },
+    )
+
+
+@app.get("/orders", response_class=HTMLResponse)
+async def orders_page(request: Request) -> HTMLResponse:
+    """Serve the orders list page."""
+    repo = handler.agent.order_repo
+    orders = await repo.get_all_orders()
+    return templates.TemplateResponse(
+        "orders.html",
+        {"request": request, "orders": orders},
     )
 
 

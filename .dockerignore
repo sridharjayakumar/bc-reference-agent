@@ -4,32 +4,15 @@ __pycache__/
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
+dist/
+build/
 
 # Virtual environments
 .venv/
 venv/
 ENV/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
+env/
 
 # Testing
 .pytest_cache/
@@ -38,20 +21,40 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
 # Environment
 .env
 .env.local
+.env.*.local
 
 # OS
 .DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+!README.md
+reference-links.txt
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Tests
+tests/
 
 # Claude
 .claude/
-
-# Additionally ignore local CLAUDE.md files if they are not meant for version control
-CLAUDE.md
-# Docker
-.docker/
 
 # SQLite database
 data/

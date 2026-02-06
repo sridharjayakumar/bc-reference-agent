@@ -105,16 +105,6 @@
             </div>
         </div>
 
-        <!-- Task History Panel (collapsible) -->
-        <details id="task-panel" class="bg-white rounded-lg shadow-md mt-4 hidden">
-            <summary class="px-6 py-4 cursor-pointer text-lg font-semibold text-gray-800 hover:bg-gray-50 rounded-lg">
-                Task History
-            </summary>
-            <div id="task-list" class="px-6 pb-4 space-y-2">
-                <!-- Tasks will be rendered here -->
-            </div>
-        </details>
-
         <!-- Footer -->
         <footer class="mt-8 text-center text-sm text-gray-500">
             <p>Brand Concierge Reference Agent - A2A Implementation</p>
@@ -125,11 +115,16 @@
                 <a href="/docs" class="text-blue-600 hover:underline">API Docs</a>
                 &middot;
                 <a href="/.well-known/agent.json" class="text-blue-600 hover:underline">Agent Card</a>
+                &middot;
+                <a href="/orders" class="text-blue-600 hover:underline">Mock Data</a>
             </p>
         </footer>
 
     </div>
 
+    <script>
+        window.__IMS_TOKEN__ = "{{ ims_token }}";
+    </script>
     <script src="/static/js/chat.js"></script>
 </body>
 </html>

@@ -17,12 +17,21 @@ This is a **reference implementation** showing developers how to build **custom 
 
 Think of this as a template/blueprint for building agents that plug into the Brand Concierge ecosystem.
 
+**Features:**
+- **Self-contained AI** - Includes Ollama for local LLM inference
+- **Multiple skills** - Product advisor, site navigator, brand assistant
+- **Conversation memory** - Maintains context across messages
+- **Fallback mode** - Works with or without AI enabled
+- **Production-ready** - Docker-based, health checks, IMS auth
+
 ## Table of Contents
 
 - [Architecture](#architecture)
+- [LLM Integration](#llm-integration)
 - [Implementation Details](#implementation-details)
 - [Authentication](#authentication)
 - [Development](#development)
+- [Docker Deployment](#docker-deployment)
 - [Production](#production)
 - [Testing](#testing)
 - [References](#references)
@@ -101,6 +110,63 @@ app/
 
 ---
 
+## LLM Integration
+
+The agent uses **Ollama** for self-contained, local AI inference
+
+### Quick Start with AI
+
+```bash
+# Start the agent (automatically pulls qwen2.5:3b on first run)
+./run.sh dev
+
+# Test it at http://localhost:8003
+```
+
+**Note:** The first time you start the agent, it will automatically download the qwen2.5:3b model (~1.9GB, takes 2-5 minutes). After the first download, it's cached and starts immediately!
+
+### How It Works
+
+- **Local LLM**: Runs Ollama container with Qwen2.5 3B
+- **Automatic setup**: Model downloads automatically on first start
+- **OpenAI-compatible**: Uses OpenAI SDK with custom base URL
+- **Fallback mode**: Works without AI if disabled
+
+### Default Model
+
+This project uses **qwen2.5:3b** (Alibaba's Qwen2.5 3B) as the default model:
+- **Size**: 1.9GB
+- **RAM**: 3GB minimum
+- **Performance**: Strong instruction following, excellent at structured data extraction
+- **Auto-download**: Automatically pulled on first startup
+
+### Configuration
+
+To customize the model or LLM settings, edit `.env`:
+
+```env
+# LLM Configuration
+LLM_ENABLED=true
+LLM_PROVIDER=ollama
+LLM_BASE_URL=http://ollama:11434/v1
+LLM_MODEL=qwen2.5:3b
+```
+
+### Disable AI (Optional)
+
+To use keyword-based responses instead of AI:
+
+```env
+# In .env
+LLM_ENABLED=false
+```
+
+Then restart: `./run.sh down && ./run.sh dev`
+
+**See [LLM-SETUP.md](LLM-SETUP.md) for complete LLM guide:** how automatic model pulling works, troubleshooting, and configuration options.
+
+---
+
 ## Implementation Details
 
 ### A2A Protocol
@@ -130,15 +196,28 @@ The Agent Card is served at `GET /.well-known/agent.json` and declares:
 
 See [Agent Cards in the spec](https://a2a-protocol.org/latest/specification/#441-agentcard).
 
-### Agent Logic (Example Implementation)
+### Agent Logic
 
-The `BrandConciergeAgent` provides a simple reference implementation using keyword matching. In production, you would replace this with your actual business logic:
+The `BrandConciergeAgent` uses AI (Ollama) to generate natural, context-aware responses:
 
-- **Product intent:** Keywords like `product`, `recommend`, `buy`, `price`, `compare` → integrate with your product catalog
-- **Navigation intent:** Keywords like `find`, `where`, `navigate`, `page`, `link` → integrate with your content management system
-- **General intent:** Default fallback for brand queries → integrate with your knowledge base or FAQ system
+1. **Intent Classification**: Keywords determine which skill to invoke
+   - **Product intent:** `product`, `recommend`, `buy`, `price`, `compare`
+   - **Navigation intent:** `find`, `where`, `navigate`, `page`, `link`
+   - **General intent:** Default fallback for brand queries
 
-This simple pattern demonstrates the architecture. Real implementations typically use LLMs, RAG, database queries, or API integrations.
+2. **System Prompt Selection**: Each intent gets a specialized system prompt
+   - Product Advisor: "You are a Product Advisor specializing in..."
+   - Site Navigator: "You are a Site Navigator helping..."
+   - Brand Assistant: "You are a Brand Assistant providing..."
+
+3. **LLM Generation**: Ollama generates contextual response
+   - Uses conversation history for follow-ups
+   - Maintains brand tone and guidelines
+   - Falls back to keyword-based if AI fails
+
+4. **Fallback Mode**: If `LLM_ENABLED=false`, uses simple hardcoded responses
+
+**Customization**: Edit system prompts in `app/agents/concierge.py` to match your brand, add RAG for knowledge base integration, or connect to your product APIs.
 
 ### State Management
 
@@ -194,56 +273,92 @@ See the [Adobe A2A Extensions](https://github.com/OneAdobe/adobe-a2a/tree/main/e
 
 ### Prerequisites
 
-- Python 3.11+
+- Docker Desktop (recommended) or Docker Engine 20.10+
+- Docker Compose V2
 
-### Setup
+**Note:** Docker is the default deployment method.
+
+### Quick Setup
 
 ```bash
 # Clone the repository
 git clone <repository-url>
 cd brand-concierge
 
-# Create virtual environment and install dependencies
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-pip install -e ".[dev]"
-
-# Copy environment template and configure
+# Copy and configure environment
 cp .env.example .env
-# Edit .env to set BRAND_NAME, BRAND_TONE, and IMS_CLIENT_ID
+# Edit .env to set IMS_CLIENT_ID and other settings
+
+# Start the agent (Docker)
+./run.sh              # macOS/Linux
+.\run.ps1             # Windows (PowerShell)
 ```
 
 ### Run the Server
 
-Using the `run.sh` script (recommended):
+Using the `run.sh` script (macOS/Linux) or `run.ps1` (Windows PowerShell):
 
 ```bash
-./run.sh              # Development mode (auto-reload, port 8000)
+./run.sh              # Development mode with hot-reload
 ./run.sh dev          # Same as above
-./run.sh --port 9000  # Custom port
-./run.sh prod         # Production mode (4 workers)
+./run.sh prod         # Production mode
+./run.sh logs         # View logs
+./run.sh status       # Check container status
+./run.sh restart      # Restart containers
+./run.sh down         # Stop containers
+./run.sh --help       # Show all commands
 ```
 
-Or run uvicorn directly:
+**Windows (PowerShell):** Replace `./run.sh` with `.\run.ps1` for all commands above.
 
-```bash
-uvicorn app.main:app --reload
-```
+The agent will be available at:
+- Test UI: http://localhost:8003
+- API Docs: http://localhost:8003/docs
+- ReDoc: http://localhost:8003/redoc
+- Agent Card: http://localhost:8003/.well-known/agent.json
 
-- Test UI: http://localhost:8000
-- API Docs: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-- Agent Card: http://localhost:8000/.well-known/agent.json
+**Note:** Default port is 8003. Change it with `PORT=8000 ./run.sh` if port 8000 is available.
 
 ### Test Chat UI
 
 The server includes a web-based test UI at `GET /` for manual testing. You'll need to provide a valid IMS Bearer token in the authentication panel to interact with the agent. The UI allows you to see the A2A JSON-RPC messages being exchanged.
 
+### Development Commands
+
+```bash
+# View logs
+./run.sh logs
+
+# Check status
+./run.sh status
+
+# Restart containers
+./run.sh restart
+
+# Stop all containers
+./run.sh down
+```
+
+### Native Python Setup (Optional)
+
+If you need to run without Docker for development:
+
+```bash
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
+pip install -e ".[dev]"
+
+# Run directly with uvicorn
+uvicorn app.main:app --reload
+```
+
 ### Example Request
 
 ```bash
-curl -X POST http://localhost:8000/a2a \
+curl -X POST http://localhost:8003/a2a \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_IMS_ACCESS_TOKEN" \
   -H "X-Adobe-Surface: web" \
@@ -260,19 +375,123 @@ curl -X POST http://localhost:8000/a2a \
   }'
 ```
 
-### Linting and Formatting
+### Code Quality (Optional - Native Python)
+
+If running native Python setup:
 
 ```bash
+# Linting and formatting
 ruff check .
 ruff check . --fix
 ruff format .
-```
 
-### Type Checking
-
-```bash
+# Type checking
 mypy app
 ```
+
+---
+
+## Docker Deployment
+
+**Note:** Docker is the default and recommended way to run this agent. The `./run.sh` script uses Docker by default.
+
+### Quick Start
+
+```bash
+# Using run.sh (recommended)
+./run.sh              # Development mode
+./run.sh prod         # Production mode
+./run.sh logs         # View logs
+./run.sh down         # Stop
+
+# Or using docker-compose directly
+docker-compose up -d
+docker-compose logs -f
+docker-compose down
+```
+
+### Advanced Docker Usage
+
+```bash
+# Build production image
+docker build -t brand-concierge-agent:latest .
+
+# Run container
+docker run -d \
+  --name brand-concierge-agent \
+  -p 8000:8000 \
+  -e IMS_CLIENT_ID=your_client_id \
+  -e BRAND_NAME="Your Brand" \
+  --env-file .env \
+  brand-concierge-agent:latest
+```
+
+### Development with Hot Reload
+
+```bash
+# Using run.sh (recommended)
+./run.sh dev
+
+# Or using docker-compose directly
+docker-compose -f docker-compose.dev.yml up
+
+# Code changes in ./app will auto-reload
+```
+
+### Docker Image Features
+
+- **Multi-stage build** - Smaller final image (~200MB)
+- **Non-root user** - Runs as user `appuser` for security
+- **Health checks** - Automatic container health monitoring
+- **Resource limits** - CPU and memory constraints configured
+- **Logging** - JSON logs with rotation (max 10MB × 3 files)
+
+### Environment Variables
+
+All configuration via environment variables or `.env` file:
+
+```env
+APP_NAME=Brand Concierge Reference Agent
+DEBUG=false
+BRAND_NAME=Your Brand
+LLM_ENABLED=true
+LLM_MODEL=qwen2.5:3b
+IMS_CLIENT_ID=your_client_id
+IMS_VALIDATION_CACHE_TTL=86400
+IMS_BASE_URL=https://ims-na1.adobelogin.com
+```
+
+### Docker Commands Reference
+
+| Command | Description |
+|---------|-------------|
+| `docker-compose up -d` | Start in background |
+| `docker-compose up --build` | Rebuild and start |
+| `docker-compose logs -f` | Follow logs |
+| `docker-compose ps` | Show running containers |
+| `docker-compose exec agent sh` | Shell into container |
+| `docker-compose down` | Stop and remove containers |
+| `docker-compose down -v` | Stop and remove volumes |
+
+### Production Deployment Options
+
+**Single Container:**
+```bash
+docker run -d \
+  --name brand-concierge-agent \
+  -p 8000:8000 \
+  --restart unless-stopped \
+  --health-cmd "curl -f http://localhost:8000/health || exit 1" \
+  --health-interval 30s \
+  --env-file .env \
+  brand-concierge-agent:latest
+```
+
+**With HTTPS (behind nginx reverse proxy):**
+See docker-compose.yml and configure nginx separately for TLS termination.
+
+**Kubernetes:**
+Use the Docker image with Kubernetes Deployment and Service manifests. Set environment variables via ConfigMap and Secrets.
 
 ---
 
@@ -280,53 +499,58 @@ mypy app
 
 ### Environment Variables
 
-Set all required variables in production:
+Set all required variables in `.env` file:
 
 ```env
-APP_NAME=Brand Concierge
+APP_NAME=Brand Concierge Reference Agent
 DEBUG=false
 
 BRAND_NAME=Your Brand Name
 BRAND_TONE=friendly and professional
 
-# IMS Authentication
+# LLM Configuration
+LLM_ENABLED=true
+LLM_PROVIDER=ollama
+LLM_BASE_URL=http://ollama:11434/v1
+LLM_MODEL=qwen2.5:3b
+
+# IMS Authentication (required)
 IMS_CLIENT_ID=your_adobe_client_id
 IMS_VALIDATION_CACHE_TTL=86400
 IMS_BASE_URL=https://ims-na1.adobelogin.com
 ```
 
-### Run with run.sh
+### Run Production Server
 
 ```bash
+# Start production mode
 ./run.sh prod
+
+# Check status
+./run.sh status
+
+# View logs
+./run.sh logs
+
+# Stop
+./run.sh down
 ```
 
-With custom host/port (or via environment variables):
+### Command Reference
 
-```bash
-HOST=0.0.0.0 PORT=8000 ./run.sh prod
-# or
-./run.sh prod --host 0.0.0.0 --port 8000
-```
-
-Or run uvicorn directly:
-
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
-```
-
-### run.sh Reference
+Use `./run.sh` on macOS/Linux or `.\run.ps1` on Windows PowerShell:
 
 | Command | Description |
 |---------|-------------|
-| `./run.sh` or `./run.sh dev` | Development mode with hot-reload (port 8000) |
-| `./run.sh prod` | Production mode with 4 workers |
-| `./run.sh --port 9000` | Custom port (works with dev or prod) |
-| `./run.sh --host 0.0.0.0` | Bind to all interfaces |
-| `HOST=0.0.0.0 PORT=8080 ./run.sh prod` | Use env vars for host/port |
-| `./run.sh --help` | Show usage and examples |
+| `./run.sh` or `./run.sh dev` | Development mode with hot-reload |
+| `./run.sh prod` | Production mode (background) |
+| `./run.sh logs` | Follow container logs |
+| `./run.sh status` | Show container status |
+| `./run.sh restart` | Restart containers |
+| `./run.sh down` | Stop and remove containers |
+| `./run.sh --help` | Show all commands |
 
-The script activates `.venv` or `venv` if present and loads `.env` before starting.
+All commands use Docker by default. The qwen2.5:3b model is automatically downloaded on first startup.
 
 ### Deployment Considerations
 

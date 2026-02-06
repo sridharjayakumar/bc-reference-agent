@@ -1,0 +1,92 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: brand-concierge-ollama-dev
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: brand-concierge-ollama-init-dev
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./scripts:/scripts:ro
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    entrypoint: ["/bin/sh", "/scripts/init-ollama.sh"]
+    restart: "no"
+
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    image: brand-concierge-reference-agent:dev
+    container_name: brand-concierge-agent-dev
+    depends_on:
+      ollama:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
+    ports:
+      - "${PORT:-8003}:8000"
+    volumes:
+      # Mount source code for hot-reload
+      - ./app:/app/app:ro
+      - ./tests:/app/tests:ro
+      # Mount SQLite database
+      - ./data:/app/data
+    environment:
+      - APP_NAME=${APP_NAME:-Brand Concierge Reference Agent}
+      - DEBUG=${DEBUG:-true}
+      - BRAND_NAME=${BRAND_NAME:-Sample Brand}
+      - BRAND_TONE=${BRAND_TONE:-friendly and professional}
+      - IMS_CLIENT_ID=${IMS_CLIENT_ID}
+      - IMS_VALIDATION_CACHE_TTL=${IMS_VALIDATION_CACHE_TTL:-86400}
+      - IMS_BASE_URL=${IMS_BASE_URL:-https://ims-na1.adobelogin.com}
+      - LLM_ENABLED=${LLM_ENABLED:-true}
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      - LLM_BASE_URL=${LLM_BASE_URL:-http://ollama:11434/v1}
+      - LLM_MODEL=${LLM_MODEL:-qwen2.5:3b}
+      - DB_PATH=${DB_PATH:-data/orders.db}
+      - HOST=0.0.0.0
+      - PORT=8000
+    env_file:
+      - .env
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  ollama_data:
+    name: brand-concierge-ollama-data-dev
+
+networks:
+  default:
+    name: brand-concierge-network-dev

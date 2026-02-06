@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orders</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        th.sortable { cursor: pointer; user-select: none; }
+        th.sortable:hover { background-color: #e5e7eb; }
+        .sort-arrow { margin-left: 4px; font-size: 0.65rem; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto max-w-6xl p-4">
+
+        <header class="bg-white rounded-lg shadow-md p-6 mb-4 flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-800">Orders</h1>
+                <p class="text-gray-600 text-sm mt-1">{{ orders | length }} orders in database</p>
+            </div>
+            <a href="/" class="text-blue-600 hover:underline text-sm">&larr; Back to Chat</a>
+        </header>
+
+        <div class="bg-white rounded-lg shadow-md overflow-x-auto">
+            <table id="orders-table" class="w-full text-sm text-left">
+                <thead class="bg-gray-50 text-gray-600 uppercase text-xs border-b">
+                    <tr>
+                        <th class="px-4 py-3 sortable" data-col="0" data-type="num">ID<span class="sort-arrow"></span></th>
+                        <th class="px-4 py-3 sortable" data-col="1" data-type="str">Order ID<span class="sort-arrow"></span></th>
+                        <th class="px-4 py-3 sortable" data-col="2" data-type="str">Name<span class="sort-arrow"></span></th>
+                        <th class="px-4 py-3 sortable" data-col="3" data-type="str">Email<span class="sort-arrow"></span></th>
+                        <th class="px-4 py-3 sortable" data-col="4" data-type="str">Address<span class="sort-arrow"></span></th>
+                        <th class="px-4 py-3 sortable" data-col="5" data-type="date">Delivery Date<span class="sort-arrow"></span></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for order in orders %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 text-gray-500">{{ order.id }}</td>
+                        <td class="px-4 py-3 font-mono text-xs">{{ order.order_id }}</td>
+                        <td class="px-4 py-3">{{ order.full_name() }}</td>
+                        <td class="px-4 py-3 text-gray-600">{{ order.email }}</td>
+                        <td class="px-4 py-3 text-gray-600">{{ order.full_address() }}</td>
+                        <td class="px-4 py-3">{{ order.delivery_date }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <footer class="mt-8 text-center text-sm text-gray-500">
+            <p>
+                <a href="/docs" class="text-blue-600 hover:underline">API Docs</a>
+                &middot;
+                <a href="/.well-known/agent.json" class="text-blue-600 hover:underline">Agent Card</a>
+                &middot;
+                <a href="/orders" class="text-blue-600 hover:underline">Mock Data</a>
+            </p>
+        </footer>
+
+    </div>
+
+    <script>
+    (function () {
+        const table = document.getElementById('orders-table');
+        const tbody = table.querySelector('tbody');
+        const headers = table.querySelectorAll('th.sortable');
+        let currentCol = null;
+        let asc = true;
+
+        function parseDate(s) {
+            // MM/DD/YYYY -> sortable value
+            const parts = s.trim().split('/');
+            if (parts.length !== 3) return 0;
+            return new Date(parts[2], parts[0] - 1, parts[1]).getTime();
+        }
+
+        function sortTable(colIdx, type) {
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+
+            rows.sort((a, b) => {
+                const aText = a.children[colIdx].textContent.trim();
+                const bText = b.children[colIdx].textContent.trim();
+                let cmp;
+
+                if (type === 'num') {
+                    cmp = Number(aText) - Number(bText);
+                } else if (type === 'date') {
+                    cmp = parseDate(aText) - parseDate(bText);
+                } else {
+                    cmp = aText.localeCompare(bText, undefined, { sensitivity: 'base' });
+                }
+
+                return asc ? cmp : -cmp;
+            });
+
+            rows.forEach(r => tbody.appendChild(r));
+        }
+
+        function updateArrows(activeHeader) {
+            headers.forEach(h => {
+                h.querySelector('.sort-arrow').textContent = '';
+            });
+            activeHeader.querySelector('.sort-arrow').textContent = asc ? ' \u25B2' : ' \u25BC';
+        }
+
+        headers.forEach(header => {
+            header.addEventListener('click', () => {
+                const col = parseInt(header.dataset.col);
+                const type = header.dataset.type;
+
+                if (currentCol === col) {
+                    asc = !asc;
+                } else {
+                    currentCol = col;
+                    asc = true;
+                }
+
+                sortTable(col, type);
+                updateArrows(header);
+            });
+        });
+    })();
+    </script>
+</body>
+</html>

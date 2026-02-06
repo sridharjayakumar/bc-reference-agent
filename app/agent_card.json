@@ -1,6 +1,6 @@
 {
-  "name": "Brand Concierge Reference Agent",
-  "description": "A reference A2A agent implementation that integrates with Adobe Brand Concierge. Demonstrates how to build custom agents with skills for product recommendations, site navigation, and brand assistance. Orchestrated by Adobe Experience Platform Agent Orchestrator.",
+  "name": "Sample Shipping Agent",
+  "description": "A reference A2A agent implementation demonstrating order tracking and shipping management. Shows how to build agents that handle order lookups, delivery date updates, and address changes with email verification. Orchestrated by Adobe Experience Platform Agent Orchestrator.",
   "url": "http://localhost:8000",
   "protocolVersions": ["0.2", "0.3"],
   "provider": {
@@ -14,36 +14,14 @@
   },
   "skills": [
     {
-      "id": "product-advisor",
-      "name": "Product Advisor",
-      "description": "Provides personalized product recommendations, comparisons, and detailed information based on customer needs and preferences.",
-      "tags": ["product", "recommendation", "comparison", "retail"],
+      "id": "shipping-assistant",
+      "name": "Shipping Assistant",
+      "description": "Helps customers track orders, check delivery dates, update delivery dates, and change shipping addresses. Verifies identity using Order ID and email address before providing order details or making changes.",
+      "tags": ["shipping", "delivery", "tracking", "orders"],
       "examples": [
-        "What laptop would you recommend for video editing?",
-        "Compare these two products for me",
-        "I'm looking for a gift under $100"
-      ]
-    },
-    {
-      "id": "site-navigator",
-      "name": "Site Navigator",
-      "description": "Helps users find content, navigate the site, and discover relevant resources based on their intent.",
-      "tags": ["navigation", "search", "discovery"],
-      "examples": [
-        "Where can I find your return policy?",
-        "Show me your latest blog posts about sustainability",
-        "I need help finding customer support"
-      ]
-    },
-    {
-      "id": "brand-assistant",
-      "name": "Brand Assistant",
-      "description": "Answers questions about the brand, provides company information, and maintains brand voice throughout interactions.",
-      "tags": ["brand", "information", "faq"],
-      "examples": [
-        "Tell me about your company values",
-        "What makes your brand different?",
-        "Do you have any current promotions?"
+        "When will my order 3DV7KU4PK54 arrive? My email is customer@example.com",
+        "Can I change my delivery date? Order ID 2K97AT2CK39, email mpedden2@cnet.com",
+        "I want to update my address to 456 Oak Avenue, Boston, Massachusetts 02101"
       ]
     }
   ],

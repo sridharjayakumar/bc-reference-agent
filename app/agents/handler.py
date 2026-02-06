@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from app.agents.concierge import BrandConciergeAgent
+from app.agents.sample_shipping_agent import ShippingAgent
 
 
 class A2AHandler:
@@ -17,7 +17,7 @@ class A2AHandler:
     """
 
     def __init__(self) -> None:
-        self.agent = BrandConciergeAgent()
+        self.agent = ShippingAgent()
         self._tasks: dict[str, dict[str, Any]] = {}
         self._contexts: dict[str, list[str]] = {}  # context_id -> list of task_ids
 
