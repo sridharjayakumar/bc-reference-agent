@@ -194,8 +194,6 @@ The `/a2a` endpoint requires Adobe IMS (Identity Management System) authenticati
 - **Header:** `Authorization: Bearer <ims_access_token>`
 - **Agent Card:** Declares `imsBearer` in `securitySchemes` and `security`
 
-See the [Adobe A2A Extensions](https://github.com/OneAdobe/adobe-a2a/tree/main/extensions/adobe) for Adobe-specific auth requirements.
-
 ### Authentication Flow
 
 1. Client sends request with `Authorization: Bearer <token>`.
