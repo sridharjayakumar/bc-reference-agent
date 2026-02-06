@@ -9,6 +9,15 @@
         th.sortable { cursor: pointer; user-select: none; }
         th.sortable:hover { background-color: #e5e7eb; }
         .sort-arrow { margin-left: 4px; font-size: 0.65rem; }
+
+        @keyframes pulse-row {
+            0%   { background-color: #dbeafe; }
+            50%  { background-color: #eff6ff; }
+            100% { background-color: #dbeafe; }
+        }
+        tr.pulse {
+            animation: pulse-row 1s ease-in-out 5;
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -36,7 +45,7 @@
                 </thead>
                 <tbody class="divide-y divide-gray-200">
                     {% for order in orders %}
-                    <tr class="hover:bg-gray-50">
+                    <tr class="hover:bg-gray-50{% if order.id == latest_order_id %} pulse{% endif %}" data-order-db-id="{{ order.id }}">
                         <td class="px-4 py-3 text-gray-500">{{ order.id }}</td>
                         <td class="px-4 py-3 font-mono text-xs">{{ order.order_id }}</td>
                         <td class="px-4 py-3">{{ order.full_name() }}</td>
@@ -121,6 +130,14 @@
                 updateArrows(header);
             });
         });
+    })();
+
+    // Remove pulse effect after 5 seconds
+    (function () {
+        const pulseRow = document.querySelector('tr.pulse');
+        if (pulseRow) {
+            setTimeout(() => pulseRow.classList.remove('pulse'), 5000);
+        }
     })();
     </script>
 </body>

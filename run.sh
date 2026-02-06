@@ -132,6 +132,14 @@ if [[ ! -f .env ]]; then
   fi
 fi
 
+# Initialize orders database from template if it doesn't exist
+if [[ ! -f data/orders.db ]]; then
+  echo "Initializing orders database from sample-orders.db..."
+  mkdir -p data
+  cp sample-orders.db data/orders.db
+  echo "Created data/orders.db"
+fi
+
 # Check for --build flag
 BUILD_FLAG=""
 if [[ "$2" == "--build" ]]; then

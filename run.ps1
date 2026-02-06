@@ -146,6 +146,15 @@ if (-not (Test-Path .env)) {
     }
 }
 
+# ── Initialize orders database from template if it doesn't exist ───────────
+
+if (-not (Test-Path "data/orders.db")) {
+    Write-Host "Initializing orders database from sample-orders.db..."
+    if (-not (Test-Path "data")) { New-Item -ItemType Directory -Path "data" | Out-Null }
+    Copy-Item "sample-orders.db" "data/orders.db"
+    Write-Host "Created data/orders.db"
+}
+
 # ── Build flag ──────────────────────────────────────────────────────────────
 
 $BuildFlag = if ($Build) { "--build" } else { "" }

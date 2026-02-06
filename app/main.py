@@ -77,9 +77,10 @@ async def orders_page(request: Request) -> HTMLResponse:
     """Serve the orders list page."""
     repo = handler.agent.order_repo
     orders = await repo.get_all_orders()
+    latest_order_id = await repo.get_latest_updated_id()
     return templates.TemplateResponse(
         "orders.html",
-        {"request": request, "orders": orders},
+        {"request": request, "orders": orders, "latest_order_id": latest_order_id},
     )
 
 

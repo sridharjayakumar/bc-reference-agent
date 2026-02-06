@@ -74,6 +74,16 @@ class OrderRepository:
 
         return [Order.from_row(dict(row)) for row in rows]
 
+    async def get_latest_updated_id(self) -> int | None:
+        """Get the ID of the order with the most recent update_time."""
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                "SELECT id FROM orders ORDER BY update_time DESC LIMIT 1"
+            )
+            row = await cursor.fetchone()
+
+        return row[0] if row else None
+
     async def get_order_count(self) -> int:
         """Get total number of orders."""
         async with aiosqlite.connect(self.db_path) as db:

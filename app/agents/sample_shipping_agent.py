@@ -1,7 +1,9 @@
 """Sample Shipping Agent - demonstrates order tracking and shipping management."""
 
 from collections.abc import AsyncIterator
-from datetime import datetime
+import random
+import re
+from datetime import datetime, timedelta
 
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
@@ -83,7 +85,6 @@ class ShippingAgent:
 
     def _extract_order_info(self, message: str) -> dict:
         """Extract order ID and email from message using simple pattern matching."""
-        import re
 
         # Look for order ID pattern (alphanumeric, typically with numbers and letters)
         order_pattern = r'\b([A-Z0-9]{10,15})\b'
@@ -97,35 +98,194 @@ class ShippingAgent:
             "email": email_match.group(0) if email_match else None
         }
 
-    def _extract_new_date(self, message: str) -> str | None:
-        """Extract new delivery date from message."""
-        import re
+    # Month name/abbreviation to number mapping
+    _MONTH_MAP: dict[str, int] = {
+        'january': 1, 'jan': 1, 'february': 2, 'feb': 2,
+        'march': 3, 'mar': 3, 'april': 4, 'apr': 4,
+        'may': 5, 'june': 6, 'jun': 6,
+        'july': 7, 'jul': 7, 'august': 8, 'aug': 8,
+        'september': 9, 'sep': 9, 'sept': 9,
+        'october': 10, 'oct': 10, 'november': 11, 'nov': 11,
+        'december': 12, 'dec': 12,
+    }
 
-        # Look for date patterns: MM/DD/YYYY, M/D/YYYY, Month DD, YYYY, etc.
-        patterns = [
-            r'\b(\d{1,2}/\d{1,2}/\d{4})\b',  # 8/8/2028, 08/08/2028
-            r'\b(\d{1,2}-\d{1,2}-\d{4})\b',  # 8-8-2028
-            r'\b([A-Za-z]+ \d{1,2},? \d{4})\b',  # August 8, 2028
+    @staticmethod
+    def _next_future_date(month: int, day: int) -> datetime:
+        """Return the next future occurrence of month/day, rolling the year forward if needed."""
+        today = datetime.now()
+        try:
+            candidate = datetime(today.year, month, day)
+        except ValueError:
+            # Invalid day for the month (e.g. Feb 30) - fall back to last day
+            # Try decreasing day until valid
+            for d in range(day, 0, -1):
+                try:
+                    candidate = datetime(today.year, month, d)
+                    break
+                except ValueError:
+                    continue
+            else:
+                return today + timedelta(days=1)
+        if candidate.date() <= today.date():
+            # Date has passed this year, roll to next year
+            try:
+                candidate = datetime(today.year + 1, month, day)
+            except ValueError:
+                for d in range(day, 0, -1):
+                    try:
+                        candidate = datetime(today.year + 1, month, d)
+                        break
+                    except ValueError:
+                        continue
+        return candidate
+
+    def _extract_new_date(self, message: str, current_delivery_date: str | None = None) -> str | None:
+        """Extract new delivery date from message, including relative expressions.
+
+        Supports:
+        - Explicit full dates: MM/DD/YYYY, MM-DD-YYYY, Month DD YYYY
+        - Partial dates (smart year/month inference):
+          - Month + day without year: "March 3rd", "Jan 15", "3/15"
+          - Day only: "the 3rd", "the 15th"
+        - Relative: tomorrow, next <weekday>, next week, this weekend,
+          next weekend, sooner/earlier
+        """
+        # 1. Try explicit full-date patterns first
+        explicit_patterns = [
+            r'\b(\d{1,2}/\d{1,2}/\d{4})\b',       # 8/8/2028, 08/08/2028
+            r'\b(\d{1,2}-\d{1,2}-\d{4})\b',        # 8-8-2028
+            r'\b([A-Za-z]+ \d{1,2},? \d{4})\b',    # August 8, 2028
         ]
-
-        for pattern in patterns:
+        for pattern in explicit_patterns:
             match = re.search(pattern, message)
             if match:
                 return match.group(1)
+
+        today = datetime.now()
+        msg = message.lower()
+
+        # 2. Try partial dates (month + day, no year)
+        month_names = '|'.join(self._MONTH_MAP.keys())
+
+        # "March 3rd", "Jan 15", "January 15th", "feb 2nd"
+        match = re.search(
+            rf'\b({month_names})\s+(\d{{1,2}})(?:st|nd|rd|th)?\b', msg
+        )
+        if match:
+            month = self._MONTH_MAP[match.group(1)]
+            day = int(match.group(2))
+            target = self._next_future_date(month, day)
+            return f"{target.month}/{target.day}/{target.year}"
+
+        # "3/15" or "03/15" (M/D without year - must NOT have a trailing /digit for YYYY)
+        match = re.search(r'\b(\d{1,2})/(\d{1,2})\b(?!/\d)', msg)
+        if match:
+            month = int(match.group(1))
+            day = int(match.group(2))
+            if 1 <= month <= 12 and 1 <= day <= 31:
+                target = self._next_future_date(month, day)
+                return f"{target.month}/{target.day}/{target.year}"
+
+        # 3. Try day-only: "the 3rd", "the 15th", "on the 3rd", "3rd"
+        match = re.search(r'(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)\b', msg)
+        if match:
+            day = int(match.group(1))
+            if 1 <= day <= 31:
+                # If day has passed in current month, assume next month
+                month = today.month
+                year = today.year
+                if day <= today.day:
+                    month += 1
+                    if month > 12:
+                        month = 1
+                        year += 1
+                try:
+                    target = datetime(year, month, day)
+                except ValueError:
+                    # Invalid day for that month, skip to month after
+                    month += 1
+                    if month > 12:
+                        month = 1
+                        year += 1
+                    try:
+                        target = datetime(year, month, day)
+                    except ValueError:
+                        target = None
+                if target:
+                    return f"{target.month}/{target.day}/{target.year}"
+
+        # 4. Try relative date expressions
+        target = None
+
+        if 'tomorrow' in msg:
+            target = today + timedelta(days=1)
+
+        elif 'next weekend' in msg:
+            # Saturday of the week after the upcoming weekend
+            days_to_saturday = (5 - today.weekday()) % 7
+            if days_to_saturday == 0:
+                days_to_saturday = 7
+            target = today + timedelta(days=days_to_saturday + 7)
+
+        elif re.search(r'(?:this\s+)?weekend', msg):
+            # The coming Saturday (or today if already Saturday)
+            days_to_saturday = (5 - today.weekday()) % 7
+            if days_to_saturday == 0 and today.weekday() != 5:
+                # It's Sunday, roll to next Saturday
+                days_to_saturday = 6
+            target = today + timedelta(days=days_to_saturday)
+
+        elif 'next week' in msg:
+            # Random weekday (Mon-Fri) of next calendar week
+            days_to_next_monday = (7 - today.weekday()) % 7
+            if days_to_next_monday == 0:
+                days_to_next_monday = 7
+            next_monday = today + timedelta(days=days_to_next_monday)
+            target = next_monday + timedelta(days=random.randint(0, 4))
+
+        elif match := re.search(
+            r'next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)', msg
+        ):
+            day_names = ['monday', 'tuesday', 'wednesday', 'thursday',
+                         'friday', 'saturday', 'sunday']
+            target_weekday = day_names.index(match.group(1))
+            days_ahead = (target_weekday - today.weekday()) % 7
+            if days_ahead == 0:
+                days_ahead = 7
+            target = today + timedelta(days=days_ahead)
+
+        elif 'sooner' in msg or 'earlier' in msg:
+            # Random date between tomorrow and current delivery date
+            if current_delivery_date:
+                try:
+                    parts = current_delivery_date.split('/')
+                    delivery_dt = datetime(int(parts[2]), int(parts[0]), int(parts[1]))
+                    tomorrow = today + timedelta(days=1)
+                    if delivery_dt > tomorrow:
+                        delta = (delivery_dt - tomorrow).days
+                        target = tomorrow + timedelta(days=random.randint(0, delta - 1) if delta > 1 else 0)
+                    else:
+                        target = tomorrow
+                except (ValueError, IndexError):
+                    target = today + timedelta(days=1)
+            else:
+                target = today + timedelta(days=1)
+
+        if target:
+            return f"{target.month}/{target.day}/{target.year}"
 
         return None
 
     def _extract_new_address(self, message: str) -> dict | None:
         """Extract new address components from message."""
-        import re
 
         # Look for address patterns in the message
         # Common format: "Street Address, City, State ZIP"
         # Example: "123 Main Street, Los Angeles, California 90210"
 
         # Pattern for addresses with number at start: "123 Main Street, City, State ZIP"
-        # This pattern matches numeric addresses
-        pattern_numeric = r'(\d+\s+[A-Za-z0-9\s]+(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Court|Ct|Boulevard|Blvd|Way|Place|Pl)?)\s*,\s*([A-Za-z\s]+)\s*,\s*([A-Za-z\s]+)\s+(\d{5})'
+        # Supports both "City, State ZIP" and "City State ZIP" (comma between city/state is optional)
+        pattern_numeric = r'(\d+\s+[A-Za-z0-9\s]+(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Court|Ct|Boulevard|Blvd|Way|Place|Pl)?)\s*,\s*([A-Za-z\s]+?)(?:\s*,\s*|\s+)([A-Za-z]{2,})\s+(\d{5})'
 
         # Try numeric address pattern first
         match = re.search(pattern_numeric, message, re.IGNORECASE)
@@ -213,7 +373,7 @@ class ShippingAgent:
 
             if verified_order:
                 # Check for date update request
-                new_date = self._extract_new_date(message)
+                new_date = self._extract_new_date(message, verified_order.get("delivery_date"))
                 is_confirming = self._is_confirmation(message)
                 is_cancelling = self._is_cancellation(message)
 
