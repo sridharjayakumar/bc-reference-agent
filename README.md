@@ -40,48 +40,7 @@ Think of this as a template/blueprint for building agents that plug into the Bra
 
 ## Architecture
 
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│               Brand Concierge Reference Agent (A2A Server)                   │
-├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  GET /                           Test chat UI (no auth)                      │
-│  GET /.well-known/agent.json     Agent Card (discovery, no auth)             │
-│  POST /a2a                       JSON-RPC 2.0 endpoint (IMS auth required)   │
-│  GET /health                     Health check (no auth)                      │
-│                                                                              │
-├──────────────────────────────────────────────────────────────────────────────┤
-│  Authentication Layer                                                        │
-│  ┌──────────────────────────────────────────────────────────────────────┐    │
-│  │  require_ims_auth → Bearer token → IMS userinfo → IMSSession         │    │
-│  └──────────────────────────────────────────────────────────────────────┘    │
-├──────────────────────────────────────────────────────────────────────────────┤
-│  A2A Protocol Handler                                                        │
-│  ┌──────────────────────────────────────────────────────────────────────┐    │
-│  │  message/send | tasks/get | tasks/list | tasks/cancel                │    │
-│  └──────────────────────────────────────────────────────────────────────┘    │
-├──────────────────────────────────────────────────────────────────────────────┤
-│  Agent Implementation (Example Skills)                                       │
-│  ┌──────────────────────────────────────────────────────────────────────┐    │
-│  │  Intent Classification → product | navigation | general              │    │
-│  │  Skill Handlers → product-advisor | site-navigator | brand-assistant │    │
-│  └──────────────────────────────────────────────────────────────────────┘    │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-           ↕ A2A Protocol (JSON-RPC 2.0 over HTTPS)
-
-┌──────────────────────────────────────────────────────────────────────────────┐
-│           Adobe Experience Platform Agent Orchestrator                       │
-│         (Routes customer queries to appropriate A2A agents)                  │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-           ↕
-
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                      Adobe Brand Concierge                                   │
-│        (Transforms websites into conversational experiences)                 │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
+![Architecture Diagram](docs/architecture.png)
 
 ### Directory Structure
 
@@ -123,7 +82,8 @@ The agent uses **Ollama** for self-contained, local AI inference
 # Test it at http://localhost:8003
 ```
 
-**Note:** The first time you start the agent, it will automatically download the qwen2.5:3b model (~1.9GB, takes 2-5 minutes). After the first download, it's cached and starts immediately!
+**Note:** The first time you start the agent, it will automatically download the qwen2.5:3b model (~1.9GB, takes 2-5 minutes). After the first download, it's cached and starts immediately! I'm using qwen since it is lightweight and performs better than gemma2 models in data look-up.
+Feel free to change it to the LLM of your choice.
 
 ### How It Works
 
