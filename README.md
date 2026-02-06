@@ -123,8 +123,6 @@ LLM_ENABLED=false
 
 Then restart: `./run.sh down && ./run.sh dev`
 
-**See [LLM-SETUP.md](LLM-SETUP.md) for complete LLM guide:** how automatic model pulling works, troubleshooting, and configuration options.
-
 ---
 
 ## Implementation Details
