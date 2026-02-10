@@ -618,7 +618,23 @@ class ChatUI {
     setSending(sending) {
         this.elements.sendBtn.disabled = sending;
         this.elements.messageInput.disabled = sending;
-        this.elements.sendBtn.textContent = sending ? 'Sending...' : 'Send';
+
+        if (sending) {
+            // Add a "Thinking..." indicator in the chat area
+            const thinkingDiv = document.createElement('div');
+            thinkingDiv.id = 'thinking-indicator';
+            thinkingDiv.className = 'flex justify-start message-bubble';
+            thinkingDiv.innerHTML = `
+                <div class="max-w-[70%] bg-gray-200 text-gray-500 rounded-lg px-4 py-2 italic flex items-center gap-2">
+                    <span class="thinking-dots">Thinking</span>
+                </div>`;
+            this.elements.messages.appendChild(thinkingDiv);
+            this.elements.messages.scrollTop = this.elements.messages.scrollHeight;
+        } else {
+            // Remove the thinking indicator
+            const indicator = document.getElementById('thinking-indicator');
+            if (indicator) indicator.remove();
+        }
     }
 }
 

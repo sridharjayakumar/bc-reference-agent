@@ -55,7 +55,7 @@ class TestAuthRequired:
         assert response.status_code == 200
 
         card = response.json()
-        assert card["name"] == "Brand Concierge Reference Agent"
+        assert card["name"] == "Sample Shipping Agent"
         assert "securitySchemes" in card
         assert "imsBearer" in card["securitySchemes"]
 

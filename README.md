@@ -1,6 +1,6 @@
 # Brand Concierge Reference Agent
 
-A reference [A2A (Agent-to-Agent)](https://a2a-protocol.org/latest/specification/) agent implementation that integrates with [Adobe Brand Concierge](https://business.adobe.com/products/brand-concierge.html). This project demonstrates how to build custom A2A-compliant agents that can be orchestrated by Adobe Experience Platform Agent Orchestrator within the Brand Concierge ecosystem.
+A reference [A2A (Agent-to-Agent)](https://a2a-protocol.org/latest/specification/) agent implementation that integrates with [Adobe Brand Concierge](https://business.adobe.com/products/brand-concierge.html). This project demonstrates how to build custom A2A-compliant agents that can be orchestrated by Adobe Experience Platform Agent Orchestrator within the Brand Concierge ecosystem. The included sample agent handles order tracking and shipping management — look up orders, check delivery dates, update delivery dates, and change shipping addresses.
 
 ## What is Adobe Brand Concierge?
 
@@ -19,7 +19,7 @@ Think of this as a template/blueprint for building agents that plug into the Bra
 
 **Features:**
 - **Self-contained AI** - Includes Ollama for local LLM inference
-- **Multiple skills** - Product advisor, site navigator, brand assistant
+- **Shipping assistant** - Order tracking, delivery date updates, address changes
 - **Conversation memory** - Maintains context across messages
 - **Fallback mode** - Works with or without AI enabled
 - **Production-ready** - Docker-based, health checks, IMS auth
@@ -46,25 +46,30 @@ Think of this as a template/blueprint for building agents that plug into the Bra
 
 ```
 app/
-├── main.py                 # FastAPI app, JSON-RPC routing, exception handlers
-├── agent_card.json         # A2A Agent Card (skills, capabilities, security)
+├── main.py                     # FastAPI app, JSON-RPC routing, exception handlers
+├── agent_card.json             # A2A Agent Card (skills, capabilities, security)
 ├── agents/
-│   ├── handler.py          # A2A protocol, task lifecycle, message routing
-│   └── concierge.py        # Intent classification and skill handlers
+│   ├── handler.py              # A2A protocol, task lifecycle, message routing
+│   └── sample_shipping_agent.py # Shipping agent: order tracking, date/address updates
 ├── auth/
-│   └── dependencies.py     # IMS auth dependency, surface detection
+│   └── dependencies.py         # IMS auth dependency, surface detection
 ├── api/routes/
-│   └── health.py           # Health check endpoint
+│   └── health.py               # Health check endpoint
 ├── core/
-│   └── config.py           # Pydantic settings (brand, IMS, etc.)
+│   └── config.py               # Pydantic settings (brand, IMS, DB, LLM)
+├── models/
+│   └── order.py                # Order and OrderUpdate Pydantic models
+├── repositories/
+│   └── order_repository.py     # SQLite-backed order data access
 ├── services/
-│   ├── ims_validator.py    # Adobe IMS token validation and caching
-│   └── session.py          # IMSSession and SessionManager
+│   ├── ims_validator.py        # Adobe IMS token validation and caching
+│   └── session.py              # IMSSession and SessionManager
 ├── templates/
-│   └── chat.html           # Test chat UI template
+│   ├── chat.html               # Test chat UI template
+│   └── orders.html             # Orders list page
 └── static/
-    ├── css/                # UI stylesheets
-    └── js/                 # UI JavaScript
+    ├── css/                    # UI stylesheets
+    └── js/                     # UI JavaScript
 ```
 
 ---
@@ -146,9 +151,7 @@ The Agent Card is served at `GET /.well-known/agent.json` and declares:
 
 - **Protocol versions:** 0.2, 0.3
 - **Skills:**
-  - `product-advisor` — Product recommendations and comparisons
-  - `site-navigator` — Content discovery and site navigation
-  - `brand-assistant` — Brand information and FAQs
+  - `shipping-assistant` — Order tracking, delivery date updates, and shipping address changes with email verification
 - **Capabilities:** Streaming enabled, push notifications disabled
 - **Security:** `imsBearer` (Adobe IMS access token)
 
@@ -156,32 +159,38 @@ See [Agent Cards in the spec](https://a2a-protocol.org/latest/specification/#441
 
 ### Agent Logic
 
-The `BrandConciergeAgent` uses AI (Ollama) to generate natural, context-aware responses:
+The `ShippingAgent` (`app/agents/sample_shipping_agent.py`) uses AI (Ollama) to generate natural, context-aware responses:
 
-1. **Intent Classification**: Keywords determine which skill to invoke
-   - **Product intent:** `product`, `recommend`, `buy`, `price`, `compare`
-   - **Navigation intent:** `find`, `where`, `navigate`, `page`, `link`
-   - **General intent:** Default fallback for brand queries
+1. **Order Verification**: Customer provides Order ID and email address
+   - Regex extraction of order ID (10-15 char alphanumeric) and email from message
+   - SQLite lookup via `OrderRepository` to verify the order
+   - Verified order stored in session state for the conversation context
 
-2. **System Prompt Selection**: Each intent gets a specialized system prompt
-   - Product Advisor: "You are a Product Advisor specializing in..."
-   - Site Navigator: "You are a Site Navigator helping..."
-   - Brand Assistant: "You are a Brand Assistant providing..."
+2. **Delivery Date Updates**: Two-step confirmation flow
+   - Extracts dates from messages (explicit dates, relative expressions like "tomorrow", "next Monday")
+   - Stores as pending change, asks for confirmation
+   - On confirmation, updates the SQLite database
 
-3. **LLM Generation**: Ollama generates contextual response
-   - Uses conversation history for follow-ups
-   - Maintains brand tone and guidelines
-   - Falls back to keyword-based if AI fails
+3. **Address Updates**: Two-step confirmation flow
+   - Extracts address components (street, city, state, ZIP) via regex
+   - Stores as pending change, asks for confirmation
+   - On confirmation, updates the SQLite database
 
-4. **Fallback Mode**: If `LLM_ENABLED=false`, uses simple hardcoded responses
+4. **LLM Generation**: Ollama generates contextual responses
+   - Uses conversation history for follow-ups (last 10 messages)
+   - System prompt includes verified order context and pending changes
+   - Falls back to keyword-based responses if AI fails
 
-**Customization**: Edit system prompts in `app/agents/concierge.py` to match your brand, add RAG for knowledge base integration, or connect to your product APIs.
+5. **Fallback Mode**: If `LLM_ENABLED=false`, uses simple keyword-based responses
+
+**Customization**: Replace `ShippingAgent` in `app/agents/sample_shipping_agent.py` with your own agent logic, add RAG for knowledge base integration, or connect to your product APIs.
 
 ### State Management
 
 - **Tasks:** In-memory store keyed by `taskId`
 - **Contexts:** `contextId` → list of `taskId`s for conversation continuity
 - **Sessions:** IMS-validated sessions with user context, surface, and context ID
+- **Orders:** SQLite database (`data/orders.db`) for order data and updates
 
 ---
 
@@ -325,7 +334,7 @@ curl -X POST http://localhost:8003/a2a \
     "params": {
       "message": {
         "role": "user",
-        "parts": [{"kind": "text", "text": "Where can I find your return policy?"}]
+        "parts": [{"kind": "text", "text": "When will my order 3DV7KU4PK54 arrive? My email is customer@example.com"}]
       }
     }
   }'

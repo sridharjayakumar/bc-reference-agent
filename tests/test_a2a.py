@@ -9,7 +9,7 @@ def test_agent_card_discovery(client: TestClient) -> None:
     assert response.status_code == 200
 
     card = response.json()
-    assert card["name"] == "Brand Concierge Reference Agent"
+    assert card["name"] == "Sample Shipping Agent"
     assert "skills" in card
     assert "capabilities" in card
     assert card["capabilities"]["streaming"] is True

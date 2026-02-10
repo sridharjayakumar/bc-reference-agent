@@ -98,6 +98,30 @@ class ShippingAgent:
             "email": email_match.group(0) if email_match else None
         }
 
+    def _resolve_order_info(self, message: str, context_id: str | None) -> dict:
+        """Extract order info from message, merging with any partial info stored in session."""
+        extracted = self._extract_order_info(message)
+
+        if context_id and context_id in self._session_state:
+            state = self._session_state[context_id]
+            # Fill in missing pieces from previously stored partial info
+            if not extracted["order_id"] and state.get("partial_order_id"):
+                extracted["order_id"] = state["partial_order_id"]
+            if not extracted["email"] and state.get("partial_email"):
+                extracted["email"] = state["partial_email"]
+
+        # Store any partial info for future messages
+        if context_id and (extracted["order_id"] or extracted["email"]):
+            if context_id not in self._session_state:
+                self._session_state[context_id] = {}
+            state = self._session_state[context_id]
+            if extracted["order_id"]:
+                state["partial_order_id"] = extracted["order_id"]
+            if extracted["email"]:
+                state["partial_email"] = extracted["email"]
+
+        return extracted
+
     # Month name/abbreviation to number mapping
     _MONTH_MAP: dict[str, int] = {
         'january': 1, 'jan': 1, 'february': 2, 'feb': 2,
@@ -342,16 +366,20 @@ class ShippingAgent:
         if not self.llm_enabled:
             return await self._fallback_response(message, context_id)
 
-        # Extract order info from message
-        extracted = self._extract_order_info(message)
+        # Extract order info from message (merges with partial info from previous messages)
+        extracted = self._resolve_order_info(message, context_id)
 
         # Check if user is trying to verify an order
         if extracted["order_id"] and extracted["email"]:
             order = await self._find_order(extracted["order_id"], extracted["email"])
             if order:
-                # Store verified order in session
+                # Store verified order in session and clean up partial info
                 if context_id:
-                    self._session_state[context_id] = {"verified_order": order}
+                    if context_id not in self._session_state:
+                        self._session_state[context_id] = {}
+                    self._session_state[context_id]["verified_order"] = order
+                    self._session_state[context_id].pop("partial_order_id", None)
+                    self._session_state[context_id].pop("partial_email", None)
 
                 # Return a programmatic greeting with real data — don't rely
                 # on the LLM to copy values from context (small models hallucinate).
@@ -366,7 +394,6 @@ class ShippingAgent:
             context_info = self._build_context(context_id) if context_id else ""
 
         # Check if user has a verified order and wants to make updates
-        update_result = None
         if context_id and context_id in self._session_state:
             state = self._session_state[context_id]
             verified_order = state.get("verified_order")
@@ -392,16 +419,19 @@ class ShippingAgent:
                 if is_cancelling and ("pending_date_update" in state or "pending_address_update" in state):
                     state.pop("pending_date_update", None)
                     state.pop("pending_address_update", None)
-                    context_info += "\n\nCANCELLED: User cancelled the pending change."
+                    return "Okay, I've cancelled that change."
 
                 # Determine the date to use (current message or pending)
                 date_to_update = None
                 if new_date:
-                    # User provided new date - store as pending, don't auto-update
+                    # User provided new date - store as pending
                     state["pending_date_update"] = new_date
                     print(f"[UPDATE DEBUG] Storing pending date: {new_date}")
-                    # Add marker for LLM to show confirmation
-                    context_info += f"\n\nPENDING_DATE_CHANGE: {new_date}"
+                    # Return programmatic response — don't rely on LLM to copy dates
+                    return (
+                        f"Your delivery date will be changed to {new_date} "
+                        f"for order {verified_order['order_id']}."
+                    )
                 elif is_confirming and "pending_date_update" in state:
                     # User explicitly confirmed the pending change
                     date_to_update = state["pending_date_update"]
@@ -409,7 +439,7 @@ class ShippingAgent:
 
                 print(f"[UPDATE DEBUG] date_to_update: {date_to_update}")
 
-                # Perform the update if we have a date to update
+                # Perform the date update
                 if date_to_update:
                     print(f"[UPDATE DEBUG] Calling _update_order for {verified_order['order_id']}")
                     success = await self._update_order(
@@ -419,14 +449,12 @@ class ShippingAgent:
                     )
                     print(f"[UPDATE DEBUG] Update success: {success}")
                     if success:
-                        # Update session with new date
                         verified_order["delivery_date"] = date_to_update
                         state["verified_order"] = verified_order
-                        # Clear pending update
                         state.pop("pending_date_update", None)
-                        update_result = f"\n\nSYSTEM: Delivery date successfully updated to {date_to_update} in database."
+                        return f"Your delivery date has been updated to {date_to_update}."
                     else:
-                        update_result = "\n\nSYSTEM: Failed to update delivery date in database."
+                        return "Sorry, I wasn't able to update the delivery date. Please try again."
 
                 # Check for address update request
                 new_address = self._extract_new_address(message)
@@ -436,12 +464,15 @@ class ShippingAgent:
                 # Determine the address to use (current message or pending)
                 address_to_update = None
                 if new_address:
-                    # User provided new address - store as pending, don't auto-update
+                    # User provided new address - store as pending
                     state["pending_address_update"] = new_address
                     print(f"[ADDRESS DEBUG] Storing pending address: {new_address}")
-                    # Add marker for LLM to show confirmation
                     addr_str = f"{new_address['street']}, {new_address['city']}, {new_address['state']} {new_address['zipcode']}"
-                    context_info += f"\n\nPENDING_ADDRESS_CHANGE: {addr_str}"
+                    # Return programmatic response — don't rely on LLM to copy addresses
+                    return (
+                        f"Your shipping address will be changed to {addr_str} "
+                        f"for order {verified_order['order_id']}."
+                    )
                 elif is_confirming and "pending_address_update" in state:
                     # User explicitly confirmed the pending change
                     address_to_update = state["pending_address_update"]
@@ -449,7 +480,7 @@ class ShippingAgent:
 
                 print(f"[ADDRESS DEBUG] address_to_update: {address_to_update}")
 
-                # Perform the update if we have an address to update
+                # Perform the address update
                 if address_to_update:
                     print(f"[ADDRESS DEBUG] Calling _update_order for address change")
                     success = await self._update_order(
@@ -459,22 +490,21 @@ class ShippingAgent:
                     )
                     print(f"[ADDRESS DEBUG] Update success: {success}")
                     if success:
-                        # Update session with new address
                         verified_order.update(address_to_update)
                         state["verified_order"] = verified_order
-                        # Clear pending update
                         state.pop("pending_address_update", None)
                         addr_summary = f"{address_to_update['street']}, {address_to_update['city']}, {address_to_update['state']} {address_to_update['zipcode']}"
-                        update_result = f"\n\nSYSTEM: Address successfully updated to {addr_summary} in database."
+                        return f"Your shipping address has been updated to {addr_summary}."
                     else:
-                        update_result = "\n\nSYSTEM: Failed to update address in database."
-
-        # Add update result to context if any
-        if update_result:
-            context_info += update_result
+                        return "Sorry, I wasn't able to update the shipping address. Please try again."
 
         # Build system prompt
-        system_prompt = self._get_system_prompt() + context_info
+        order_verified = bool(
+            context_id
+            and context_id in self._session_state
+            and self._session_state[context_id].get("verified_order")
+        )
+        system_prompt = self._get_system_prompt(order_verified=order_verified) + context_info
 
         # Build conversation messages
         messages = self._build_conversation_messages(system_prompt, message, context_id)
@@ -527,15 +557,24 @@ class ShippingAgent:
                 yield word + " "
             return
 
-        # Extract and verify order info
-        extracted = self._extract_order_info(message)
+        # Extract and verify order info (merges with partial info from previous messages)
+        extracted = self._resolve_order_info(message, context_id)
         if extracted["order_id"] and extracted["email"]:
             order = await self._find_order(extracted["order_id"], extracted["email"])
             if order and context_id:
-                self._session_state[context_id] = {"verified_order": order}
+                if context_id not in self._session_state:
+                    self._session_state[context_id] = {}
+                self._session_state[context_id]["verified_order"] = order
+                self._session_state[context_id].pop("partial_order_id", None)
+                self._session_state[context_id].pop("partial_email", None)
 
         context_info = self._build_context(context_id) if context_id else ""
-        system_prompt = self._get_system_prompt() + context_info
+        order_verified = bool(
+            context_id
+            and context_id in self._session_state
+            and self._session_state[context_id].get("verified_order")
+        )
+        system_prompt = self._get_system_prompt(order_verified=order_verified) + context_info
         messages = self._build_conversation_messages(system_prompt, message, context_id)
 
         try:
@@ -565,9 +604,9 @@ class ShippingAgent:
             for word in response.split():
                 yield word + " "
 
-    def _get_system_prompt(self) -> str:
+    def _get_system_prompt(self, order_verified: bool = False) -> str:
         """Get the system prompt for the shipping agent."""
-        return f"""You are a helpful shipping assistant for {self.brand_name}.
+        base = f"""You are a helpful shipping assistant for {self.brand_name}.
 Your tone should be {self.brand_tone}.
 Keep responses concise (2-3 sentences) and actionable.
 Do not use emojis in your responses.
@@ -576,45 +615,29 @@ You help customers with:
 - Checking delivery dates for their orders
 - Updating delivery dates
 - Updating shipping addresses
-- Answering questions about their shipments
+- Answering questions about their shipments"""
+
+        if order_verified:
+            base += """
+
+The customer's order has ALREADY been verified. You have their order details in the Verified Order Context below.
+- DO NOT ask for their email address or Order ID again — verification is complete.
+- Use the real values from the Verified Order Context to answer their questions.
+- If user asks to change/update something but DOES NOT provide the new date/address:
+  * Ask them: "What date would you like to change it to?" or "What is your new address?"
+  * DO NOT invent or suggest dates or addresses
+- NEVER mention "Confirm" or "Cancel" buttons - they appear automatically"""
+        else:
+            base += """
 
 IMPORTANT SECURITY:
 - Always require both Order ID AND email address for verification
 - If the user hasn't provided both, politely ask for the missing information
 - Never share full details until verification is complete
 
-CRITICAL - Responding to Order Verification:
-- If you see a "Verified Order Context" section, the order is ALREADY VERIFIED
-- DO NOT say "I'm verifying", "Please wait", "I'm checking", or "Let me look that up"
-- Read the Verified Order Context and use the real values directly in your response
-- Your response MUST include the actual Customer name, Order ID, and Delivery Date from the context
-- Do NOT use any placeholder text in brackets - only use real data from the context
-- If verified order info is not in the context, ask for Order ID and email
-
-CRITICAL - Handling Update Requests:
-- If user asks to change/update something but DOES NOT provide the new date/address:
-  * Ask them: "What date would you like to change it to?" or "What is your new address?"
-  * DO NOT invent or suggest dates
-  * WAIT for them to provide the specific information
-- When you see "PENDING_DATE_CHANGE:" followed by a date in the context:
-  * Use the exact date shown after "PENDING_DATE_CHANGE:" in your response
-  * Respond ONLY: "Your delivery date will be changed to <the date> for order <order_id>."
-  * DO NOT mention confirmation, buttons, or next steps
-  * Just state what will change, nothing more
-- When you see "PENDING_ADDRESS_CHANGE:" followed by an address in the context:
-  * Use the exact address shown after "PENDING_ADDRESS_CHANGE:" in your response
-  * Respond ONLY: "Your shipping address will be changed to <the address> for order <order_id>."
-  * DO NOT mention confirmation, buttons, or next steps
-- When you see "SYSTEM:" followed by "successfully updated in database":
-  * Respond ONLY: "Your delivery date has been updated successfully." or "Your shipping address has been updated successfully." depending on what was updated
-  * Do NOT repeat the date or address unless it appears in the SYSTEM message
-- When you see "CANCELLED: User cancelled the pending change":
-  * Respond: "Okay, I've cancelled that change."
-- NEVER invent dates or addresses - only use what the user provides
-- NEVER claim an update is complete unless you see the SYSTEM confirmation message
-- NEVER mention "Confirm" or "Cancel" buttons - they appear automatically
-
 When you don't have specific order information yet, guide the user to provide their Order ID and email address for verification."""
+
+        return base
 
     def _build_conversation_messages(
         self, system_prompt: str, user_message: str, context_id: str | None
@@ -664,14 +687,18 @@ When you don't have specific order information yet, guide the user to provide th
         Fallback response when LLM is disabled or errors occur.
         """
         message_lower = message.lower()
-        extracted = self._extract_order_info(message)
+        extracted = self._resolve_order_info(message, context_id)
 
         # Check if they're providing order info
         if extracted["order_id"] and extracted["email"]:
             order = await self._find_order(extracted["order_id"], extracted["email"])
             if order:
                 if context_id:
-                    self._session_state[context_id] = {"verified_order": order}
+                    if context_id not in self._session_state:
+                        self._session_state[context_id] = {}
+                    self._session_state[context_id]["verified_order"] = order
+                    self._session_state[context_id].pop("partial_order_id", None)
+                    self._session_state[context_id].pop("partial_email", None)
                 return (
                     f"Order {order['order_id']} verified! "
                     f"Your delivery to {order['city']}, {order['state']} is scheduled for {order['delivery_date']}. "
