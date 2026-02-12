@@ -31,9 +31,6 @@ Think of this as a template/blueprint for building agents that plug into the Bra
 - [Implementation Details](#implementation-details)
 - [Authentication](#authentication)
 - [Development](#development)
-- [Docker Deployment](#docker-deployment)
-- [Production](#production)
-- [Testing](#testing)
 - [References](#references)
 
 ---
@@ -304,22 +301,6 @@ The server includes a web-based test UI at `GET /` for manual testing. You'll ne
 ./run.sh down
 ```
 
-### Native Python Setup (Optional)
-
-If you need to run without Docker for development:
-
-```bash
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install -e ".[dev]"
-
-# Run directly with uvicorn
-uvicorn app.main:app --reload
-```
-
 ### Example Request
 
 ```bash
@@ -339,78 +320,6 @@ curl -X POST http://localhost:8003/a2a \
     }
   }'
 ```
-
-### Code Quality (Optional - Native Python)
-
-If running native Python setup:
-
-```bash
-# Linting and formatting
-ruff check .
-ruff check . --fix
-ruff format .
-
-# Type checking
-mypy app
-```
-
----
-
-## Docker Deployment
-
-**Note:** Docker is the default and recommended way to run this agent. The `./run.sh` script uses Docker by default.
-
-### Quick Start
-
-```bash
-# Using run.sh (recommended)
-./run.sh              # Development mode
-./run.sh prod         # Production mode
-./run.sh logs         # View logs
-./run.sh down         # Stop
-
-# Or using docker-compose directly
-docker-compose up -d
-docker-compose logs -f
-docker-compose down
-```
-
-### Advanced Docker Usage
-
-```bash
-# Build production image
-docker build -t brand-concierge-agent:latest .
-
-# Run container
-docker run -d \
-  --name brand-concierge-agent \
-  -p 8000:8000 \
-  -e IMS_CLIENT_ID=your_client_id \
-  -e BRAND_NAME="Your Brand" \
-  --env-file .env \
-  brand-concierge-agent:latest
-```
-
-### Development with Hot Reload
-
-```bash
-# Using run.sh (recommended)
-./run.sh dev
-
-# Or using docker-compose directly
-docker-compose -f docker-compose.dev.yml up
-
-# Code changes in ./app will auto-reload
-```
-
-### Docker Image Features
-
-- **Multi-stage build** - Smaller final image (~200MB)
-- **Non-root user** - Runs as user `appuser` for security
-- **Health checks** - Automatic container health monitoring
-- **Resource limits** - CPU and memory constraints configured
-- **Logging** - JSON logs with rotation (max 10MB × 3 files)
-
 ### Environment Variables
 
 All configuration via environment variables or `.env` file:
@@ -426,147 +335,6 @@ IMS_VALIDATION_CACHE_TTL=86400
 IMS_BASE_URL=https://ims-na1.adobelogin.com
 ```
 
-### Docker Commands Reference
-
-| Command | Description |
-|---------|-------------|
-| `docker-compose up -d` | Start in background |
-| `docker-compose up --build` | Rebuild and start |
-| `docker-compose logs -f` | Follow logs |
-| `docker-compose ps` | Show running containers |
-| `docker-compose exec agent sh` | Shell into container |
-| `docker-compose down` | Stop and remove containers |
-| `docker-compose down -v` | Stop and remove volumes |
-
-### Production Deployment Options
-
-**Single Container:**
-```bash
-docker run -d \
-  --name brand-concierge-agent \
-  -p 8000:8000 \
-  --restart unless-stopped \
-  --health-cmd "curl -f http://localhost:8000/health || exit 1" \
-  --health-interval 30s \
-  --env-file .env \
-  brand-concierge-agent:latest
-```
-
-**With HTTPS (behind nginx reverse proxy):**
-See docker-compose.yml and configure nginx separately for TLS termination.
-
-**Kubernetes:**
-Use the Docker image with Kubernetes Deployment and Service manifests. Set environment variables via ConfigMap and Secrets.
-
----
-
-## Production
-
-### Environment Variables
-
-Set all required variables in `.env` file:
-
-```env
-APP_NAME=Brand Concierge Reference Agent
-DEBUG=false
-
-BRAND_NAME=Your Brand Name
-BRAND_TONE=friendly and professional
-
-# LLM Configuration
-LLM_ENABLED=true
-LLM_PROVIDER=ollama
-LLM_BASE_URL=http://ollama:11434/v1
-LLM_MODEL=qwen2.5:3b
-
-# IMS Authentication (required)
-IMS_CLIENT_ID=your_adobe_client_id
-IMS_VALIDATION_CACHE_TTL=86400
-IMS_BASE_URL=https://ims-na1.adobelogin.com
-```
-
-### Run Production Server
-
-```bash
-# Start production mode
-./run.sh prod
-
-# Check status
-./run.sh status
-
-# View logs
-./run.sh logs
-
-# Stop
-./run.sh down
-```
-
-### Command Reference
-
-Use `./run.sh` on macOS/Linux or `.\run.ps1` on Windows PowerShell:
-
-| Command | Description |
-|---------|-------------|
-| `./run.sh` or `./run.sh dev` | Development mode with hot-reload |
-| `./run.sh prod` | Production mode (background) |
-| `./run.sh logs` | Follow container logs |
-| `./run.sh status` | Show container status |
-| `./run.sh restart` | Restart containers |
-| `./run.sh down` | Stop and remove containers |
-| `./run.sh --help` | Show all commands |
-
-All commands use Docker by default. The qwen2.5:3b model is automatically downloaded on first startup.
-
-### Deployment Considerations
-
-1. **State:** Tasks and sessions are stored in memory. For multi-worker or multi-instance deployments, use a shared store (e.g., Redis).
-2. **HTTPS:** Use a reverse proxy (nginx, Caddy) or load balancer with TLS.
-3. **Agent Card URL:** Update the `url` field in `agent_card.json` to your production base URL, or serve it dynamically from config.
-4. **IMS:** Ensure `IMS_CLIENT_ID` is set for Adobe integrations. Obtain client credentials from [Adobe Developer Console](https://developer.adobe.com/).
-
----
-
-## Testing
-
-### Run All Tests
-
-```bash
-pytest
-```
-
-### Run Specific Test Files
-
-```bash
-pytest tests/test_a2a.py
-pytest tests/test_agent.py
-pytest tests/test_health.py
-pytest tests/test_auth.py
-```
-
-### Run a Single Test
-
-```bash
-pytest tests/test_a2a.py::test_send_message -v
-```
-
-### Test Coverage
-
-```bash
-pytest --cov=app --cov-report=term-missing
-```
-
-### Testing Without Real IMS Tokens
-
-The pytest test suite uses mocked IMS authentication so you can run tests without real tokens:
-
-- **Authenticated tests** (`test_a2a`, `test_agent`): Use the `client` fixture which mocks `ims_validator.validate_token` to return a test user.
-- **Auth tests** (`test_auth`): Test authentication flow with both successful and failed validation scenarios.
-- **Unauthenticated tests**: Use the `unauthenticated_client` fixture to test auth error handling.
-
-See `tests/conftest.py` for implementation details. Note that running the actual server always requires real IMS authentication - there is no "development mode" that bypasses auth.
-
----
-
 ## References
 
 | Resource | Link |
@@ -577,6 +345,4 @@ See `tests/conftest.py` for implementation details. Note that running the actual
 | Agent Cards (Spec) | https://a2a-protocol.org/latest/specification/#441-agentcard |
 | Life of a Task | https://a2a-protocol.org/latest/topics/life-of-a-task/ |
 | A2A Extensions | https://a2a-protocol.org/latest/topics/extensions/ |
-| Adobe A2A Extensions | https://github.com/OneAdobe/adobe-a2a/tree/main/extensions/adobe |
-| Adobe Agent Orchestrator – Agent Development | https://devhome.corp.adobe.com/docs/default/component/agent-orchestrator/developer-guides/pages/agent-development |
 | Agent Discovery (Curated Registries) | https://a2a-protocol.org/latest/topics/agent-discovery/#2-curated-registries-catalog-based-discovery |
